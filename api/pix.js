@@ -9,7 +9,9 @@ module.exports = async (req, res) => {
 
   const b = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
   const cents = Math.round(Number(b.valor) * 100);
-  if (!Number.isFinite(cents) || cents < 100) return res.status(400).json({ error: 'Informe um valor válido (mínimo R$ 1,00)' });
+  if (!Number.isFinite(cents) || cents < 130) {
+    return res.status(400).json({ error: 'Informe um valor válido (mínimo R$ 1,30 na TiggerPay)' });
+  }
 
   const doc = digits(b.cpf) || digits(process.env.CUSTOMER_CPF);
   const phone = digits(b.telefone) || digits(process.env.CUSTOMER_PHONE);
@@ -31,7 +33,13 @@ module.exports = async (req, res) => {
   try {
     const r = await tp('/create-pix-duck', { method: 'POST', body: JSON.stringify(payload) });
     const j = await r.json();
-    if (!r.ok || j.error) return res.status(r.status >= 400 ? r.status : 502).json({ error: j.error || j.message || 'Erro ao gerar PIX' });
+    if (!r.ok || j.error) {
+      let err = j.error || j.message || 'Erro ao gerar PIX';
+      if (err === 'Erro ao criar pagamento') {
+        err = 'Erro ao criar pagamento: a TiggerPay exige valor mínimo de R$ 1,30 (recomendado R$ 2,00 ou mais).';
+      }
+      return res.status(r.status >= 400 ? r.status : 502).json({ error: err });
+    }
 
     const copiaECola = j.pix_code || j.pix_qr_code;
     res.json({
