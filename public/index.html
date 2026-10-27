@@ -30,13 +30,7 @@
 <main>
   <h1>Gerador de PIX</h1>
 
-  <div class="card" id="login">
-    <label>Senha de acesso</label>
-    <input id="senha" type="password" placeholder="Senha do gerador">
-    <button id="entrar">Entrar</button>
-  </div>
-
-  <div class="card hide" id="form">
+  <div class="card" id="form">
     <label>Valor (R$)</label>
     <input id="valor" class="valor" inputmode="decimal" placeholder="0,00">
     <label>Descrição</label>
@@ -65,22 +59,11 @@
 </main>
 <script>
 const $ = id => document.getElementById(id);
-let senha = sessionStorage.getItem('senha') || '', poll, cur;
+let poll, cur;
 
-const api = (path, opt = {}) => fetch(path, { ...opt, headers: { 'Content-Type': 'application/json', 'x-app-password': senha } });
+const api = (path, opt = {}) => fetch(path, { ...opt, headers: { 'Content-Type': 'application/json' } });
 const brl = n => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-function show(id) { ['login', 'form', 'resultado'].forEach(x => $(x).classList.toggle('hide', x !== id)); }
-
-async function init() {
-  // descobre se precisa de senha testando o status com id inválido
-  const r = await api('/api/status?id=x');
-  show(r.status === 401 ? 'login' : 'form');
-}
-$('entrar').onclick = async () => {
-  senha = $('senha').value; sessionStorage.setItem('senha', senha);
-  const r = await api('/api/status?id=x');
-  if (r.status === 401) { $('senha').value = ''; $('senha').placeholder = 'Senha incorreta'; } else show('form');
-};
+function show(id) { ['form', 'resultado'].forEach(x => $(x).classList.toggle('hide', x !== id)); }
 
 $('gerar').onclick = async () => {
   $('erro').textContent = ''; $('gerar').disabled = true; $('gerar').textContent = 'Gerando...';
@@ -99,15 +82,24 @@ $('gerar').onclick = async () => {
     poll = setInterval(async () => {
       const s = await (await api('/api/status?id=' + j.id)).json();
       if (s.status) setStatus(s.status);
-      if (s.status && s.status !== 'PENDING') clearInterval(poll);
+      if (s.status && s.status !== 'PENDING' && s.status !== 'waiting_payment' && s.status !== 'pendente') clearInterval(poll);
     }, 5000);
   } catch (e) { $('erro').textContent = e.message; }
   $('gerar').disabled = false; $('gerar').textContent = 'Gerar PIX';
 };
 function setStatus(s) {
   const b = $('rstatus');
-  b.textContent = { PENDING: 'Aguardando pagamento', PAID: 'Pago ✓', CANCELLED: 'Expirado' }[s] || s;
-  b.classList.toggle('paid', s === 'PAID');
+  const labels = {
+    PENDING: 'Aguardando pagamento',
+    waiting_payment: 'Aguardando pagamento',
+    pendente: 'Aguardando pagamento',
+    PAID: 'Pago ✓',
+    approved: 'Pago ✓',
+    CANCELLED: 'Expirado',
+    refused: 'Recusado'
+  };
+  b.textContent = labels[s] || s;
+  b.classList.toggle('paid', s === 'PAID' || s === 'approved');
 }
 $('copiar').onclick = async () => {
   try { await navigator.clipboard.writeText(cur.copiaECola); } catch { $('copia').select(); document.execCommand('copy'); }
@@ -118,7 +110,6 @@ $('zap').onclick = () => {
   window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
 };
 $('novo').onclick = () => { clearInterval(poll); $('valor').value = ''; $('descricao').value = ''; show('form'); };
-init();
 </script>
 </body>
 </html>
